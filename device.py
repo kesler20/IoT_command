@@ -65,11 +65,8 @@ def call_back(client, user_data, message):
 
 
 pump = Device('pumpID')
-compressor = Device('compressorID')
 
-for i in range(10):
-    pump.publish_data('pump/pressure', 'pressure form the pump')
-    compressor.subscribe_to_topic('pump/pressure', call_back)
+for i in range(100):
+    pump.publish_data('pump/pressure', i)
 
 pump.tear_down('pump/pressure')
-compressor.tear_down('pump/pressure')
