@@ -1,15 +1,16 @@
+from random import randint
 import time
 from config import *
-
+import AWSIoTPythonSDK
 import AWSIoTPythonSDK.MQTTLib as AWSIoTPyMQTT
 from AWSIoTPythonSDK.MQTTLib import AWSIoTMQTTClient
 
-#set device up a a conterxt manager
+# set device up a a conterxt manager
 # class File(object):
-    	
+
 #     def __init__(self, filename, mode):
-#         self.filename = filename 
-#         self.mode = mode 
+#         self.filename = filename
+#         self.mode = mode
 #     def __enter__(self):
 #         self.file = open(self.filename, self.mode)
 #         return self.file
@@ -61,12 +62,16 @@ class Device(object):
 
 
 def call_back(client, user_data, message):
-    print(str(message.payload)[str(message.payload).find('b')+1:].replace("'",''))
+    print(str(message.payload)[
+          str(message.payload).find('b')+1:].replace("'", ''))
 
 
 pump = Device('pumpID')
 
-for i in range(100):
-    pump.publish_data('pump/pressure', i)
+while True:
+    try:
+        pump.publish_data('pump/pressure', randint(0,10))
+    except AWSIoTPythonSDK.exception.AWSIoTExceptions.subscribeTimeoutException:
+        pass
 
 pump.tear_down('pump/pressure')
