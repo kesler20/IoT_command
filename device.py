@@ -1,26 +1,16 @@
+import json
 from random import randint
 import time
 from config import *
 import AWSIoTPythonSDK
 import AWSIoTPythonSDK.MQTTLib as AWSIoTPyMQTT
 from AWSIoTPythonSDK.MQTTLib import AWSIoTMQTTClient
+import random 
+import pandas as pd
 
-# set device up a a conterxt manager
-# class File(object):
-
-#     def __init__(self, filename, mode):
-#         self.filename = filename
-#         self.mode = mode
-#     def __enter__(self):
-#         self.file = open(self.filename, self.mode)
-#         return self.file
-#     def __exit__(self, exec_type, exec_val, traceback):
-#         self.file.close()
-
-# with File('code_snippets.txt', 'w') as f:
-# 	f.write('this is the file we are using)
-
-# print(f.close)
+TOPIC_CONTROL = 'control'
+TOPIC_DATA = 'data'
+data = pd.DataFrame({'ctrl1': [0], 'ctrl2': [0]})
 
 
 class Device(object):
@@ -60,18 +50,82 @@ class Device(object):
         self.client.disconnect()
         self.client.unsubscribe(topic)
 
+def check(checker: Device, t1a, y1a, t2a, y2a): # input for function is (n)
+    if t1a > y1a+20:
+        x1 = -1
+    elif t1a < y1a-20:
+        x1 = 1
+    else:
+        x1 = 0
+
+    if t2a > y2a+5:
+        x2 = -1
+    elif t2a < y2a-5:
+        x2 = 1
+    else:
+        x2 = 0
+
+    info = {
+        "ctrl1": x1,
+        "ctrl2": x2,
+    }
+
+    checker.publish_data(TOPIC_CONTROL, str(info))
+
+    return x1, x2
 
 def call_back(client, user_data, message):
-    print(str(message.payload)[
-          str(message.payload).find('b')+1:].replace("'", ''))
+    global data 
 
+    msg = str(message.payload)[
+        str(message.payload).find('b')+1:].replace("'", '')
+    
+    print(type(data))
+    data['ctrl1'] = [data['ctrl1']]
+    data['ctrl2'] = [data['ctrl2']]
+    print(data)
 
-pump = Device('pumpID')
+checker = Device('checkerID')
+number_generator = Device('numberID')
+data_reader = Device('dataID')
+
+x_value = 0
+total_1 = 1000
+total_2 = 1080
+t1s = -6
+t1e = 6
+t2s = -7
+t2e = 6.8
+trend_1 = 1000
+trend_2 = 1080
 
 while True:
     try:
-        pump.publish_data('pump/pressure', randint(0,10))
+        info = {
+            "x_value": x_value,
+            "total_1": total_1,
+            "total_2": total_2,
+            "trend_1": trend_1,
+            "trend_2": trend_2
+        }
+
+        number_generator.publish_data(TOPIC_DATA,str(info))
+        check(checker, trend_1, total_1, trend_2, total_2)
+
+        #print(x_value, total_1, trend_1, total_2, trend_2,)
+
+        x_value += 1
+
+        data_reader.subscribe_to_topic(TOPIC_CONTROL, call_back)
+
+        # print('Control 1: ' + str(data.iat[0,0]) + ' Control 2: ' + str(data.iat[0,1]))
+
+        # total_1 = total_1 + random.randint(t1s, t1e) - (data.iat[0,0] * (t1e-t1s)/16)
+        # total_2 = total_2 + random.uniform(t2s, t2e) - (data.iat[0,1] * (t2e-t2s)/2)
+
+        # trend_1 = trend_1 + (t1e-t1s)/2+t1s
+        # trend_2 = trend_2 + (t2e-t2s)/2+t2s
     except AWSIoTPythonSDK.exception.AWSIoTExceptions.subscribeTimeoutException:
         pass
 
-pump.tear_down('pump/pressure')
+# pump.tear_down('pump/pressure')
