@@ -1,16 +1,24 @@
-import json
+import random
 from random import randint
 import time
+from pandas import DataFrame
 from config import *
 import AWSIoTPythonSDK
 import AWSIoTPythonSDK.MQTTLib as AWSIoTPyMQTT
 from AWSIoTPythonSDK.MQTTLib import AWSIoTMQTTClient
-import random 
-import pandas as pd
+import json
 
-TOPIC_CONTROL = 'control'
-TOPIC_DATA = 'data'
-data = pd.DataFrame({'ctrl1': [0], 'ctrl2': [0]})
+READ_TOPIC = 'control_data'
+WRITE_TOPIC = 'data'
+x_value = 0
+total_1 = 1000
+total_2 = 1080
+t1s = -6
+t1e = 6
+t2s = -7
+t2e = 6.8
+trend_1 = 1000
+trend_2 = 1080
 
 
 class Device(object):
@@ -50,7 +58,19 @@ class Device(object):
         self.client.disconnect()
         self.client.unsubscribe(topic)
 
-def check(checker: Device, t1a, y1a, t2a, y2a): # input for function is (n)
+
+number_generator = Device('pumpID')
+info = {
+    "ctrl1": [0],
+    "ctrl2": [0],
+}
+data = DataFrame(data=info)
+checker = Device('checkerID')
+checker.publish_data(READ_TOPIC, json.dumps(info))
+time.sleep(2)  # in seconds
+
+
+def check(t1a, y1a, t2a, y2a):  # input for function is (n)
     if t1a > y1a+20:
         x1 = -1
     elif t1a < y1a-20:
@@ -66,38 +86,29 @@ def check(checker: Device, t1a, y1a, t2a, y2a): # input for function is (n)
         x2 = 0
 
     info = {
-        "ctrl1": x1,
-        "ctrl2": x2,
+        "ctrl1": [x1],
+        "ctrl2": [x2],
     }
+        
+    time.sleep(2)  # in seconds
 
-    checker.publish_data(TOPIC_CONTROL, str(info))
+    checker.publish_data(READ_TOPIC, json.dumps(info))
 
-    return x1, x2
+    return DataFrame(data=info)
 
-def call_back(client, user_data, message):
-    global data 
-
-    msg = str(message.payload)[
+def call_back(client, used_data, message):
+    info = str(message.payload)[
         str(message.payload).find('b')+1:].replace("'", '')
-    
-    print(type(data))
-    data['ctrl1'] = [data['ctrl1']]
-    data['ctrl2'] = [data['ctrl2']]
+    print('Topic: ', message.topic)
+    print('message: ', info)
+
+    time.sleep(2)  # in seconds
+
+    info = json.loads(info)
+    data = check(info['trend_1'], info['total_1'],info['trend_2'], info['total_2'])
+    # the check function publishes the data to the control topic
     print(data)
 
-checker = Device('checkerID')
-number_generator = Device('numberID')
-data_reader = Device('dataID')
-
-x_value = 0
-total_1 = 1000
-total_2 = 1080
-t1s = -6
-t1e = 6
-t2s = -7
-t2e = 6.8
-trend_1 = 1000
-trend_2 = 1080
 
 while True:
     try:
@@ -109,22 +120,25 @@ while True:
             "trend_2": trend_2
         }
 
-        number_generator.publish_data(TOPIC_DATA,str(info))
-        check(checker, trend_1, total_1, trend_2, total_2)
-
-        #print(x_value, total_1, trend_1, total_2, trend_2,)
+        number_generator.publish_data(WRITE_TOPIC, json.dumps(info))
+        print(x_value, total_1, trend_1, total_2, trend_2)
 
         x_value += 1
 
-        data_reader.subscribe_to_topic(TOPIC_CONTROL, call_back)
+        number_generator.subscribe_to_topic(READ_TOPIC, call_back)
+        # manipulate the data from the callback
+        print('Control 1: ' + str(data.iat[0, 0]) +
+              ' Control 2: ' + str(data.iat[0, 1]))
 
-        # print('Control 1: ' + str(data.iat[0,0]) + ' Control 2: ' + str(data.iat[0,1]))
+        total_1 = total_1 + \
+            random.randint(t1s, t1e) - (data.iat[0, 0] * (t1e-t1s)/16)
+        total_2 = total_2 + \
+            random.uniform(t2s, t2e) - (data.iat[0, 1] * (t2e-t2s)/2)
 
-        # total_1 = total_1 + random.randint(t1s, t1e) - (data.iat[0,0] * (t1e-t1s)/16)
-        # total_2 = total_2 + random.uniform(t2s, t2e) - (data.iat[0,1] * (t2e-t2s)/2)
+        trend_1 = trend_1 + (t1e-t1s)/2+t1s
+        trend_2 = trend_2 + (t2e-t2s)/2+t2s
 
-        # trend_1 = trend_1 + (t1e-t1s)/2+t1s
-        # trend_2 = trend_2 + (t2e-t2s)/2+t2s
+        time.sleep(2)  # in seconds
     except AWSIoTPythonSDK.exception.AWSIoTExceptions.subscribeTimeoutException:
         pass
 
